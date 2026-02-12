@@ -470,7 +470,7 @@ node server.js  # Serves on localhost:5001
 ## File Structure
 
 ```
-/Ascendr (or /Tonr)
+/Tonr
 ├── .env                      # Environment variables (gitignored)
 ├── .env.example              # Template for .env
 ├── .gitignore                # Git ignore rules

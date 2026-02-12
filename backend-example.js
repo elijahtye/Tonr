@@ -13,7 +13,15 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 require('dotenv').config();
 
+// Wrap async handlers to catch rejections (Express 4 doesn't catch them - prevents serverless crash)
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 const app = express();
+
+// Base URL for redirects (used by Stripe, password reset, etc.)
+const FRONTEND_BASE = process.env.frontend_url 
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) 
+    || 'http://localhost:5001';
 
 // Security middleware
 app.use(helmet()); // Adds various HTTP headers for security
@@ -36,10 +44,7 @@ const corsOptions = {
         }
         
         // In production, check against whitelist
-        const FRONTEND_BASE = process.env.frontend_url 
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) 
-    || 'http://localhost:5001';
-const allowedOrigins = [FRONTEND_BASE, ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : [])];
+        const allowedOrigins = [FRONTEND_BASE, ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : [])];
         if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
@@ -83,26 +88,28 @@ const supabaseUrl = process.env.supabase_url || process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseAnonKey = process.env.supabase_key || process.env.SUPABASE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('⚠️  ERROR: Supabase configuration missing!');
-    console.error('   Please add to .env:');
-    console.error('   supabase_url=https://your-project.supabase.co');
-    console.error('   supabase_key=your-anon-key');
-    console.error('   supabase_service_role_key=your-service-role-key');
-}
-
 // Use service role key for backend operations (admin access, bypasses RLS)
 // Falls back to anon key if service role key not provided (for development)
-const supabase = createClient(
-    supabaseUrl, 
-    supabaseServiceKey || supabaseAnonKey,
-    {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false
-        }
+// Only create client when config exists - prevents crash on Vercel when env vars missing
+let supabase;
+try {
+    if (supabaseUrl && supabaseAnonKey) {
+        supabase = createClient(
+            supabaseUrl, 
+            supabaseServiceKey || supabaseAnonKey,
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            }
+        );
+    } else {
+        console.warn('⚠️  Supabase configuration missing. Auth and user features will be disabled. Add supabase_url, supabase_key to env.');
     }
-);
+} catch (e) {
+    console.warn('⚠️  Supabase init failed:', e.message);
+}
 
 // Initialize Stripe
 const stripeSecretKey = process.env.stripe_secret_key || process.env.STRIPE_SECRET_KEY;
@@ -146,19 +153,15 @@ function authenticateToken(req, res, next) {
 }
 
 // Initialize OpenAI client - reads from .env file
+// Don't exit on missing key; return errors from analyze endpoint instead (allows app to start on Vercel)
 const openaiApiKey = process.env.openai_key || process.env.OPENAI_API_KEY;
+const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 if (!openaiApiKey) {
-    console.error('⚠️  ERROR: OpenAI API key not found in .env file!');
-    console.error('   Please add: openai_key=sk-your-key-here');
-    process.exit(1);
+    console.warn('⚠️  OpenAI API key not found. Speech analysis will be disabled. Add openai_key or OPENAI_API_KEY to env.');
 }
 
-const openai = new OpenAI({
-    apiKey: openaiApiKey
-});
-
 // Auth Routes with Supabase
-app.post('/api/auth/signup', authLimiter, async (req, res) => {
+app.post('/api/auth/signup', authLimiter, asyncHandler(async (req, res) => {
     try {
         const { name, email, password } = req.body;
 
@@ -215,9 +218,9 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
         console.error('Signup error:', error);
         res.status(500).json({ error: 'Failed to create account' });
     }
-});
+}));
 
-app.post('/api/auth/login', authLimiter, async (req, res) => {
+app.post('/api/auth/login', authLimiter, asyncHandler(async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -264,13 +267,24 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Failed to login' });
     }
-});
+}));
 
 // Apply general API rate limiting to all /api routes
 app.use('/api', apiLimiter);
 
+// Middleware: return 503 if supabase required but not configured
+const requireSupabase = (req, res, next) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Service unavailable. Add supabase_url and supabase_key to environment variables.' });
+    }
+    next();
+};
+
+app.use('/api/auth', requireSupabase);
+app.use('/api/user', requireSupabase);
+
 // Get current user profile
-app.get('/api/user/profile', authenticateToken, async (req, res) => {
+app.get('/api/user/profile', authenticateToken, asyncHandler(async (req, res) => {
     try {
         // Get user data from Supabase
         const { data: userData, error: userError } = await supabase
@@ -297,10 +311,10 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
         console.error('Get profile error:', error);
         res.status(500).json({ error: 'Failed to get profile' });
     }
-});
+}));
 
 // Update user profile (name)
-app.put('/api/user/profile', authenticateToken, async (req, res) => {
+app.put('/api/user/profile', authenticateToken, asyncHandler(async (req, res) => {
     try {
         const { name } = req.body;
 
@@ -332,10 +346,10 @@ app.put('/api/user/profile', authenticateToken, async (req, res) => {
         console.error('Update profile error:', error);
         res.status(500).json({ error: 'Failed to update profile' });
     }
-});
+}));
 
 // Change password
-app.post('/api/user/change-password', authenticateToken, async (req, res) => {
+app.post('/api/user/change-password', authenticateToken, asyncHandler(async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
 
@@ -392,10 +406,10 @@ app.post('/api/user/change-password', authenticateToken, async (req, res) => {
         console.error('Change password error:', error);
         res.status(500).json({ error: 'Failed to change password' });
     }
-});
+}));
 
 // Request password reset email
-app.post('/api/user/forgot-password', async (req, res) => {
+app.post('/api/user/forgot-password', asyncHandler(async (req, res) => {
     try {
         const { email } = req.body;
 
@@ -425,10 +439,10 @@ app.post('/api/user/forgot-password', async (req, res) => {
             message: 'If an account exists with this email, you will receive a password reset link.' 
         });
     }
-});
+}));
 
 // Get user tier
-app.get('/api/user/tier', authenticateToken, async (req, res) => {
+app.get('/api/user/tier', authenticateToken, asyncHandler(async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('users')
@@ -445,10 +459,10 @@ app.get('/api/user/tier', authenticateToken, async (req, res) => {
         console.error('Get tier error:', error);
         res.status(500).json({ error: 'Failed to get tier' });
     }
-});
+}));
 
 // Set user tier (for free tier selection)
-app.post('/api/user/tier', authenticateToken, async (req, res) => {
+app.post('/api/user/tier', authenticateToken, asyncHandler(async (req, res) => {
     try {
         const { tier } = req.body;
 
@@ -486,10 +500,10 @@ app.post('/api/user/tier', authenticateToken, async (req, res) => {
         console.error('Set tier error:', error);
         res.status(500).json({ error: 'Failed to set tier' });
     }
-});
+}));
 
 // Check usage limits
-app.get('/api/user/usage', authenticateToken, async (req, res) => {
+app.get('/api/user/usage', authenticateToken, asyncHandler(async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
         
@@ -529,10 +543,13 @@ app.get('/api/user/usage', authenticateToken, async (req, res) => {
         console.error('Usage check error:', error);
         res.status(500).json({ error: 'Failed to check usage' });
     }
-});
+}));
 
 // Stripe checkout session
-app.post('/api/stripe/create-checkout', authenticateToken, async (req, res) => {
+app.post('/api/stripe/create-checkout', authenticateToken, asyncHandler(async (req, res) => {
+    if (!stripe) {
+        return res.status(503).json({ error: 'Payments not configured. Add stripe_secret_key to env.' });
+    }
     try {
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
@@ -566,10 +583,13 @@ app.post('/api/stripe/create-checkout', authenticateToken, async (req, res) => {
         console.error('Stripe error:', error);
         res.status(500).json({ error: 'Failed to create checkout session' });
     }
-});
+}));
 
 // Stripe webhook (for subscription updates)
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), asyncHandler(async (req, res) => {
+    if (!stripe) {
+        return res.status(503).send('Stripe not configured');
+    }
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -583,7 +603,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     }
 
     // Handle subscription events
-    if (event.type === 'checkout.session.completed') {
+    if (event.type === 'checkout.session.completed' && supabase) {
         const session = event.data.object;
         const userId = session.metadata.user_id;
 
@@ -594,7 +614,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             .eq('id', userId);
     }
 
-    if (event.type === 'customer.subscription.deleted') {
+    if (event.type === 'customer.subscription.deleted' && supabase) {
         const subscription = event.data.object;
         const userId = subscription.metadata.user_id;
 
@@ -606,7 +626,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     }
 
     res.json({ received: true });
-});
+}));
 
 // Tonality descriptions for prompt customization
 const tonalityDescriptions = {
@@ -628,7 +648,7 @@ const tonalityDescriptions = {
 };
 
 // Protect analyze-speech endpoint with authentication and tier restrictions
-app.post('/api/analyze-speech', analysisLimiter, authenticateToken, async (req, res) => {
+app.post('/api/analyze-speech', analysisLimiter, authenticateToken, asyncHandler(async (req, res) => {
     try {
         const { transcript, tonality = 'neutral' } = req.body;
 
@@ -640,6 +660,9 @@ app.post('/api/analyze-speech', analysisLimiter, authenticateToken, async (req, 
         let tier = 'pro'; // Default to pro for localhost
         
         if (!isLocalhost) {
+            if (!supabase) {
+                return res.status(503).json({ error: 'Service unavailable. Supabase not configured.' });
+            }
             // Get user tier and usage
             const { data: userData } = await supabase
                 .from('users')
@@ -696,6 +719,12 @@ app.post('/api/analyze-speech', analysisLimiter, authenticateToken, async (req, 
             return res.status(400).json({ error: 'Transcript is required' });
         }
 
+        if (!openai) {
+            return res.status(503).json({ 
+                error: 'Speech analysis is not configured. Add OPENAI_API_KEY to your Vercel environment variables.' 
+            });
+        }
+
         const tonalityInfo = tonalityDescriptions[tonality] || tonalityDescriptions.neutral;
 
         const prompt = `You are a speech communication coach specializing in ${tonalityInfo.name.toLowerCase()} communication style (${tonalityInfo.description}).
@@ -744,6 +773,14 @@ Respond in JSON format:
             error: 'Failed to analyze speech',
             details: error.message 
         });
+    }
+}));
+
+// Global error handler - catches any errors passed to next()
+app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

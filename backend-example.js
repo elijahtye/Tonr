@@ -30,8 +30,16 @@ const corsOptions = {
             return callback(null, true);
         }
         
+        // Allow Vercel deployments
+        if (origin.endsWith('.vercel.app') || origin.includes('vercel.app')) {
+            return callback(null, true);
+        }
+        
         // In production, check against whitelist
-        const allowedOrigins = [process.env.frontend_url || 'http://localhost:5001'];
+        const FRONTEND_BASE = process.env.frontend_url 
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) 
+    || 'http://localhost:5001';
+const allowedOrigins = [FRONTEND_BASE, ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : [])];
         if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
@@ -397,7 +405,7 @@ app.post('/api/user/forgot-password', async (req, res) => {
 
         // Send password reset email via Supabase
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${process.env.frontend_url || 'http://localhost:5001'}/reset-password.html`
+            redirectTo: `${FRONTEND_BASE}/reset-password.html`
         });
 
         if (error) {
@@ -545,8 +553,8 @@ app.post('/api/stripe/create-checkout', authenticateToken, async (req, res) => {
                 },
             ],
             mode: 'subscription',
-            success_url: `${process.env.frontend_url || 'http://localhost:5001'}/dashboard.html?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.frontend_url || 'http://localhost:5001'}/pricing.html`,
+            success_url: `${FRONTEND_BASE}/dashboard.html?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${FRONTEND_BASE}/pricing.html`,
             client_reference_id: req.user.id,
             metadata: {
                 user_id: req.user.id
@@ -739,15 +747,21 @@ Respond in JSON format:
     }
 });
 
-const PORT = process.env.port || process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`\n✅ Tonr backend server running on port ${PORT}\n`);
-    console.log('Configuration Status:');
-    console.log(`  OpenAI API Key: ${openaiApiKey ? '✅ Configured' : '❌ Missing'}`);
-    console.log(`  Supabase URL: ${supabaseUrl ? '✅ Configured' : '❌ Missing'}`);
-    console.log(`  Supabase Key: ${supabaseAnonKey ? '✅ Configured' : '❌ Missing'}`);
-    console.log(`  Supabase Service Role: ${supabaseServiceKey ? '✅ Configured' : '⚠️  Using anon key (not recommended for production)'}`);
-    console.log(`  Stripe Secret Key: ${stripeSecretKey ? '✅ Configured' : '⚠️  Missing (payments disabled)'}`);
-    console.log(`  JWT Secret: ${JWT_SECRET && JWT_SECRET !== 'your-secret-key-change-in-production' ? '✅ Configured' : '⚠️  Using default (change in production)'}\n`);
-});
+// Export for Vercel serverless
+module.exports = app;
+
+// Start server when run directly (not when required by Vercel)
+if (require.main === module) {
+    const PORT = process.env.port || process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`\n✅ Tonr backend server running on port ${PORT}\n`);
+        console.log('Configuration Status:');
+        console.log(`  OpenAI API Key: ${openaiApiKey ? '✅ Configured' : '❌ Missing'}`);
+        console.log(`  Supabase URL: ${supabaseUrl ? '✅ Configured' : '❌ Missing'}`);
+        console.log(`  Supabase Key: ${supabaseAnonKey ? '✅ Configured' : '❌ Missing'}`);
+        console.log(`  Supabase Service Role: ${supabaseServiceKey ? '✅ Configured' : '⚠️  Using anon key (not recommended for production)'}`);
+        console.log(`  Stripe Secret Key: ${stripeSecretKey ? '✅ Configured' : '⚠️  Missing (payments disabled)'}`);
+        console.log(`  JWT Secret: ${JWT_SECRET && JWT_SECRET !== 'your-secret-key-change-in-production' ? '✅ Configured' : '⚠️  Using default (change in production)'}\n`);
+    });
+}
 

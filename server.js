@@ -15,11 +15,16 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
 };
 
+const STATIC_DIR = path.join(__dirname, 'public');
+
 function createServer() {
   return http.createServer((req, res) => {
-    let filePath = '.' + req.url;
-    if (filePath === './') {
-      filePath = './index.html';
+    let filePath = path.join(STATIC_DIR, req.url === '/' ? 'index.html' : req.url);
+    filePath = path.resolve(filePath);
+    if (!filePath.startsWith(path.resolve(STATIC_DIR))) {
+      res.writeHead(403);
+      res.end('Forbidden', 'utf-8');
+      return;
     }
 
     const extname = String(path.extname(filePath)).toLowerCase();

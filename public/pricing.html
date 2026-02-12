@@ -132,7 +132,7 @@
 
                     const token = localStorage.getItem('tonr_token');
                     try {
-                        const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                        const backendUrl = window.BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '');
                         const response = await fetch(`${backendUrl}/api/user/tier`, {
                             method: 'POST',
                             headers: {
@@ -165,7 +165,7 @@
 
                     const token = localStorage.getItem('tonr_token');
                     try {
-                        const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                        const backendUrl = window.BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '');
                         const response = await fetch(`${backendUrl}/api/stripe/create-checkout`, {
                             method: 'POST',
                             headers: {

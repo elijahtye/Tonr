@@ -219,7 +219,7 @@ async function fetchOpenAIAnalysis(transcript, tonality) {
     try {
         // Backend API call - update the URL to match your backend
         // In production, set this to your actual backend URL
-        const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+        const backendUrl = window.BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '');
         
         // Check if localhost - skip auth for localhost
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -300,7 +300,7 @@ async function checkUsage() {
     if (!token) return;
 
     try {
-        const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+        const backendUrl = window.BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '');
         const response = await fetch(`${backendUrl}/api/user/usage`, {
             headers: {
                 'Authorization': `Bearer ${token}`

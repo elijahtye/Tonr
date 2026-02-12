@@ -6,8 +6,8 @@
     <title>Dashboard - Tonr</title>
     <link rel="stylesheet" href="styles.css">
     <script>
-        // Backend URL configuration - update this to match your backend server
-        window.BACKEND_URL = 'http://localhost:3000';
+        // Backend URL - uses same origin when deployed, localhost:3000 for local dev
+        window.BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
     </script>
     <style>
         .dashboard-container {

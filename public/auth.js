@@ -1,6 +1,6 @@
 // Authentication System
 
-const API_URL = window.BACKEND_URL || 'http://localhost:3000';
+const API_URL = window.BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '');
 
 // Check if user is logged in
 function isAuthenticated() {

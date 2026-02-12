@@ -4,6 +4,7 @@
 // Install: npm install express openai dotenv cors @supabase/supabase-js stripe jsonwebtoken express-rate-limit helmet
 
 const express = require('express');
+const path = require('path');
 const { OpenAI } = require('openai');
 const { createClient } = require('@supabase/supabase-js');
 const Stripe = require('stripe');
@@ -57,6 +58,14 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Serve static files FIRST (before API routes) - fixes "Cannot GET /" on Vercel
+const publicDir = path.join(__dirname, 'public');
+app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('/login.html', (req, res) => res.sendFile(path.join(publicDir, 'login.html')));
+app.get('/dashboard.html', (req, res) => res.sendFile(path.join(publicDir, 'dashboard.html')));
+app.get('/pricing.html', (req, res) => res.sendFile(path.join(publicDir, 'pricing.html')));
+app.use(express.static(publicDir));
 
 // Rate limiting to prevent abuse
 const authLimiter = rateLimit({

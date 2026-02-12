@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Tonr</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        // Backend URL configuration - update this to match your backend server
+        window.BACKEND_URL = 'http://localhost:3000';
+    </script>
+    <style>
+        .dashboard-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .dashboard-header h1 {
+            font-size: 36px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: -0.03em;
+        }
+
+        .dashboard-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .recording-panel {
+            background: rgba(37, 37, 37, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 32px;
+            backdrop-filter: blur(16px);
+            margin-bottom: 32px;
+        }
+
+        .record-button {
+            width: 100%;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .record-button:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .record-button.recording {
+            background: rgba(220, 38, 38, 0.2);
+            border-color: rgba(220, 38, 38, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .record-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .record-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .transcript-panel {
+            background: rgba(37, 37, 37, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            backdrop-filter: blur(16px);
+            margin-bottom: 32px;
+            min-height: 200px;
+        }
+
+        .transcript-panel h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .transcript-content {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            min-height: 100px;
+        }
+
+        .transcript-content.empty {
+            color: var(--text-secondary);
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        .analysis-panel {
+            background: rgba(37, 37, 37, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            backdrop-filter: blur(16px);
+        }
+
+        .analysis-panel h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .rating-display {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .rating-number {
+            font-size: 64px;
+            font-weight: 600;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .rating-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .feedback-section {
+            margin-top: 24px;
+        }
+
+        .feedback-section h4 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .feedback-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .feedback-list li {
+            padding: 12px 0;
+            padding-left: 24px;
+            position: relative;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .feedback-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feedback-list li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: var(--text-primary);
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+            padding: 20px;
+        }
+
+        .error-message {
+            background: rgba(220, 38, 38, 0.1);
+            border: 1px solid rgba(220, 38, 38, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            color: #ff6b6b;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        /* Account Menu Styles */
+        .account-menu-wrapper {
+            position: relative;
+        }
+
+        .account-button {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            color: var(--text-primary);
+        }
+
+        .account-button:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .account-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .account-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: rgba(37, 37, 37, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 280px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s ease;
+            z-index: 1000;
+        }
+
+        .account-dropdown.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .account-info {
+            margin-bottom: 16px;
+        }
+
+        .account-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .account-email {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .account-tier {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .account-tier.pro {
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+        }
+
+        .account-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 16px 0;
+        }
+
+        .account-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .account-action-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 10px 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .account-action-btn svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .account-action-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .account-action-btn.logout-btn {
+            color: #ff6b6b;
+            border-color: rgba(255, 107, 107, 0.2);
+        }
+
+        .account-action-btn.logout-btn:hover {
+            background: rgba(255, 107, 107, 0.1);
+            border-color: rgba(255, 107, 107, 0.3);
+        }
+
+        /* Password Reset Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: rgba(37, 37, 37, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            backdrop-filter: blur(20px);
+            transform: scale(0.95);
+            transition: transform 0.2s;
+        }
+
+        .modal-overlay.show .modal {
+            transform: scale(1);
+        }
+
+        .modal h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .modal input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-btn-primary {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+        }
+
+        .modal-btn-primary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .modal-btn-secondary {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+        }
+
+        .modal-btn-secondary:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-message {
+            font-size: 13px;
+            margin-top: 12px;
+            padding: 8px;
+            border-radius: 6px;
+        }
+
+        .modal-message.success {
+            background: rgba(34, 197, 94, 0.1);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .modal-message.error {
+            background: rgba(220, 38, 38, 0.1);
+            color: #ff6b6b;
+            border: 1px solid rgba(220, 38, 38, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="nav">
+                <div class="logo">
+                    <a href="index.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 10px;">
+                        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 3L20 21H4L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="logo-text">TONR</span>
+                    </a>
+                </div>
+                <nav class="nav-links">
+                    <a href="index.html#how-it-works">How it Works</a>
+                    <a href="pricing.html">Pricing</a>
+                </nav>
+                <div class="account-menu-wrapper">
+                    <button class="account-button" id="accountButton">
+                        <svg class="account-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <div class="account-dropdown" id="accountDropdown">
+                        <div class="account-info">
+                            <div class="account-name" id="accountName">Loading...</div>
+                            <div class="account-email" id="accountEmail">Loading...</div>
+                            <div class="account-tier" id="accountTier">Loading...</div>
+                        </div>
+                        <div class="account-divider"></div>
+                        <div class="account-actions">
+                            <button class="account-action-btn" id="changeTierBtn">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Change Tier
+                            </button>
+                            <button class="account-action-btn" id="resetPasswordBtn">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Reset Password
+                            </button>
+                            <button class="account-action-btn logout-btn" id="logoutBtn">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Speech Analysis Dashboard</h1>
+            <p>Record your speech and get AI-powered feedback on your communication</p>
+            <div id="usageInfo" style="margin-top: 12px; font-size: 13px; color: var(--text-secondary);"></div>
+        </div>
+
+        <div class="recording-panel">
+            <button id="recordButton" class="record-button">
+                <svg class="record-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="12" r="6" fill="currentColor"/>
+                </svg>
+                <span id="recordButtonText">Start Recording</span>
+            </button>
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+        </div>
+
+        <div class="transcript-panel">
+            <h3>Transcript</h3>
+            <div id="transcriptContent" class="transcript-content empty">No recording yet. Click "Start Recording" to begin.</div>
+        </div>
+
+        <div class="analysis-panel">
+            <h3>AI Analysis</h3>
+            <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center;">
+                <label for="tonalitySelect" style="font-size: 14px; color: var(--text-secondary); font-weight: 500;">Output Tonality:</label>
+                <select id="tonalitySelect" class="tone-dropdown" style="flex: 1; max-width: 300px;">
+                    <option value="neutral">Neutral → clean, natural</option>
+                    <option value="assertive">Assertive → direct, decisive</option>
+                    <option value="composed">Composed → calm, controlled</option>
+                </select>
+            </div>
+            <div id="analysisContent">
+                <div class="loading" style="display: none;">Analyzing your speech...</div>
+                <div id="ratingDisplay" style="display: none;">
+                    <div class="rating-display">
+                        <div class="rating-number" id="ratingNumber">0</div>
+                        <div class="rating-label">Overall Score</div>
+                    </div>
+                    <div class="feedback-section">
+                        <h4>Areas for Improvement</h4>
+                        <ul class="feedback-list" id="feedbackList"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Reset Modal -->
+    <div class="modal-overlay" id="passwordModal">
+        <div class="modal">
+            <h3>Reset Password</h3>
+            <input type="password" id="currentPassword" placeholder="Current Password" autocomplete="current-password">
+            <input type="password" id="newPassword" placeholder="New Password" autocomplete="new-password">
+            <input type="password" id="confirmPassword" placeholder="Confirm New Password" autocomplete="new-password">
+            <div class="modal-message" id="passwordMessage" style="display: none;"></div>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-primary" id="savePasswordBtn">Save</button>
+                <button class="modal-btn modal-btn-secondary" id="cancelPasswordBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tier Change Modal -->
+    <div class="modal-overlay" id="tierModal">
+        <div class="modal">
+            <h3>Change Tier</h3>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">Select your preferred tier:</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button class="account-action-btn" id="selectFreeTierBtn" style="justify-content: space-between;">
+                    <span>
+                        <strong>Free</strong>
+                        <span style="display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Limited refinements per day • Default tone only</span>
+                    </span>
+                </button>
+                <button class="account-action-btn" id="selectProTierBtn" style="justify-content: space-between;">
+                    <span>
+                        <strong>Pro</strong>
+                        <span style="display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Unlimited refinements • Full tone control • $9/month</span>
+                    </span>
+                </button>
+            </div>
+            <div class="modal-message" id="tierMessage" style="display: none;"></div>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-secondary" id="cancelTierBtn" style="width: 100%;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script src="dashboard.js"></script>
+    <script>
+        // Check authentication and tier on dashboard load
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Skip auth check for localhost
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            
+            if (!isLocalhost && !isAuthenticated()) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // Skip tier check for localhost
+            if (!isLocalhost) {
+                const token = localStorage.getItem('tonr_token');
+                try {
+                    const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                    const response = await fetch(`${backendUrl}/api/user/tier`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (!data.tier) {
+                            // Redirect to pricing to select tier
+                            window.location.href = 'pricing.html?select_tier=true';
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Tier check error:', error);
+                }
+            }
+
+            // Load user profile and setup account menu
+            await loadUserProfile();
+            setupAccountMenu();
+        });
+
+        // Account Menu Functionality
+        let userProfile = null;
+
+        async function loadUserProfile() {
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const token = localStorage.getItem('tonr_token');
+            
+            if (!token && !isLocalhost) {
+                return;
+            }
+
+            try {
+                const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                const response = await fetch(`${backendUrl}/api/user/profile`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    userProfile = await response.json();
+                    updateAccountDisplay();
+                } else if (isLocalhost) {
+                    // Mock data for localhost
+                    userProfile = {
+                        name: 'Demo User',
+                        email: 'demo@tonr.net',
+                        tier: 'pro'
+                    };
+                    updateAccountDisplay();
+                }
+            } catch (error) {
+                console.error('Failed to load profile:', error);
+                if (isLocalhost) {
+                    userProfile = {
+                        name: 'Demo User',
+                        email: 'demo@tonr.net',
+                        tier: 'pro'
+                    };
+                    updateAccountDisplay();
+                }
+            }
+        }
+
+        function updateAccountDisplay() {
+            if (!userProfile) return;
+
+            const nameEl = document.getElementById('accountName');
+            const emailEl = document.getElementById('accountEmail');
+            const tierEl = document.getElementById('accountTier');
+
+            if (nameEl) nameEl.textContent = userProfile.name || 'User';
+            if (emailEl) emailEl.textContent = userProfile.email || '';
+            if (tierEl) {
+                const tier = userProfile.tier || 'free';
+                tierEl.textContent = tier === 'pro' ? 'Pro' : 'Free';
+                tierEl.className = 'account-tier ' + tier;
+            }
+        }
+
+        function setupAccountMenu() {
+            const accountButton = document.getElementById('accountButton');
+            const accountDropdown = document.getElementById('accountDropdown');
+            const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+            const changeTierBtn = document.getElementById('changeTierBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const passwordModal = document.getElementById('passwordModal');
+            const tierModal = document.getElementById('tierModal');
+
+            // Toggle dropdown
+            if (accountButton && accountDropdown) {
+                accountButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    accountDropdown.classList.toggle('show');
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!accountButton.contains(e.target) && !accountDropdown.contains(e.target)) {
+                        accountDropdown.classList.remove('show');
+                    }
+                });
+            }
+
+            // Reset Password
+            if (resetPasswordBtn) {
+                resetPasswordBtn.addEventListener('click', () => {
+                    accountDropdown.classList.remove('show');
+                    passwordModal.classList.add('show');
+                });
+            }
+
+            // Change Tier
+            if (changeTierBtn) {
+                changeTierBtn.addEventListener('click', () => {
+                    accountDropdown.classList.remove('show');
+                    tierModal.classList.add('show');
+                });
+            }
+
+            // Logout
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', () => {
+                    logout();
+                });
+            }
+
+            // Password Modal
+            const cancelPasswordBtn = document.getElementById('cancelPasswordBtn');
+            const savePasswordBtn = document.getElementById('savePasswordBtn');
+            const passwordMessage = document.getElementById('passwordMessage');
+
+            if (cancelPasswordBtn) {
+                cancelPasswordBtn.addEventListener('click', () => {
+                    passwordModal.classList.remove('show');
+                    document.getElementById('currentPassword').value = '';
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('confirmPassword').value = '';
+                    passwordMessage.style.display = 'none';
+                });
+            }
+
+            if (savePasswordBtn) {
+                savePasswordBtn.addEventListener('click', async () => {
+                    const currentPassword = document.getElementById('currentPassword').value;
+                    const newPassword = document.getElementById('newPassword').value;
+                    const confirmPassword = document.getElementById('confirmPassword').value;
+
+                    if (!currentPassword || !newPassword || !confirmPassword) {
+                        showPasswordMessage('Please fill in all fields', 'error');
+                        return;
+                    }
+
+                    if (newPassword !== confirmPassword) {
+                        showPasswordMessage('New passwords do not match', 'error');
+                        return;
+                    }
+
+                    if (newPassword.length < 6) {
+                        showPasswordMessage('Password must be at least 6 characters', 'error');
+                        return;
+                    }
+
+                    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                    const token = localStorage.getItem('tonr_token');
+
+                    if (!token && !isLocalhost) {
+                        showPasswordMessage('Not authenticated', 'error');
+                        return;
+                    }
+
+                    try {
+                        const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                        const response = await fetch(`${backendUrl}/api/user/change-password`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({ currentPassword, newPassword })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            showPasswordMessage('Password updated successfully!', 'success');
+                            setTimeout(() => {
+                                passwordModal.classList.remove('show');
+                                document.getElementById('currentPassword').value = '';
+                                document.getElementById('newPassword').value = '';
+                                document.getElementById('confirmPassword').value = '';
+                                passwordMessage.style.display = 'none';
+                            }, 1500);
+                        } else {
+                            showPasswordMessage(data.error || 'Failed to update password', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Password change error:', error);
+                        showPasswordMessage('Failed to update password. Please try again.', 'error');
+                    }
+                });
+            }
+
+            function showPasswordMessage(message, type) {
+                passwordMessage.textContent = message;
+                passwordMessage.className = 'modal-message ' + type;
+                passwordMessage.style.display = 'block';
+            }
+
+            // Tier Modal
+            const cancelTierBtn = document.getElementById('cancelTierBtn');
+            const selectFreeTierBtn = document.getElementById('selectFreeTierBtn');
+            const selectProTierBtn = document.getElementById('selectProTierBtn');
+            const tierMessage = document.getElementById('tierMessage');
+
+            if (cancelTierBtn) {
+                cancelTierBtn.addEventListener('click', () => {
+                    tierModal.classList.remove('show');
+                    tierMessage.style.display = 'none';
+                });
+            }
+
+            if (selectFreeTierBtn) {
+                selectFreeTierBtn.addEventListener('click', async () => {
+                    await changeTier('free');
+                });
+            }
+
+            if (selectProTierBtn) {
+                selectProTierBtn.addEventListener('click', async () => {
+                    // Redirect to Stripe checkout for Pro
+                    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                    const token = localStorage.getItem('tonr_token');
+
+                    if (!token && !isLocalhost) {
+                        showTierMessage('Please log in to upgrade', 'error');
+                        return;
+                    }
+
+                    try {
+                        const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                        const response = await fetch(`${backendUrl}/api/stripe/create-checkout`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            window.location.href = data.url;
+                        } else {
+                            const error = await response.json();
+                            showTierMessage(error.error || 'Failed to start checkout', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Checkout error:', error);
+                        showTierMessage('Failed to start checkout. Please try again.', 'error');
+                    }
+                });
+            }
+
+            async function changeTier(tier) {
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const token = localStorage.getItem('tonr_token');
+
+                if (!token && !isLocalhost) {
+                    showTierMessage('Please log in to change tier', 'error');
+                    return;
+                }
+
+                try {
+                    const backendUrl = window.BACKEND_URL || 'http://localhost:3000';
+                    const response = await fetch(`${backendUrl}/api/user/tier`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ tier })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        userProfile.tier = tier;
+                        updateAccountDisplay();
+                        showTierMessage('Tier updated successfully!', 'success');
+                        setTimeout(() => {
+                            tierModal.classList.remove('show');
+                            tierMessage.style.display = 'none';
+                            // Reload page to update UI restrictions
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        showTierMessage(data.error || 'Failed to update tier', 'error');
+                    }
+                } catch (error) {
+                    console.error('Tier change error:', error);
+                    showTierMessage('Failed to update tier. Please try again.', 'error');
+                }
+            }
+
+            function showTierMessage(message, type) {
+                tierMessage.textContent = message;
+                tierMessage.className = 'modal-message ' + type;
+                tierMessage.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
+

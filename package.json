@@ -1,0 +1,32 @@
+{
+  "name": "tonr",
+  "version": "1.0.0",
+  "description": "Speech refinement and communication enhancement platform",
+  "main": "backend-example.js",
+  "scripts": {
+    "start": "node backend-example.js",
+    "dev": "nodemon backend-example.js"
+  },
+  "keywords": [
+    "speech",
+    "communication",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "openai": "^4.20.1",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2",
+    "@supabase/supabase-js": "^2.38.4",
+    "stripe": "^14.7.0",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+

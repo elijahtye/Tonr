@@ -10,8 +10,19 @@ ADD COLUMN IF NOT EXISTS referrer_code text;
 
 -- Add constraint: creator codes must be alphanumeric + underscore/hyphen, max 50 chars
 -- Prevents SQL injection and invalid codes
+-- Note: Drop constraint first if it exists, then add it
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'check_referrer_code_format'
+    ) THEN
+        ALTER TABLE users DROP CONSTRAINT check_referrer_code_format;
+    END IF;
+END $$;
+
 ALTER TABLE users
-ADD CONSTRAINT IF NOT EXISTS check_referrer_code_format
+ADD CONSTRAINT check_referrer_code_format
 CHECK (referrer_code IS NULL OR (
   LENGTH(referrer_code) <= 50 AND
   referrer_code ~ '^[a-zA-Z0-9_-]+$'

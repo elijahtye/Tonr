@@ -67,6 +67,59 @@ app.get('/dashboard.html', (req, res) => res.sendFile(path.join(publicDir, 'dash
 app.get('/pricing.html', (req, res) => res.sendFile(path.join(publicDir, 'pricing.html')));
 app.use(express.static(publicDir));
 
+// Helper: best-effort client IP extraction (supports proxies like Vercel)
+function getClientIp(req) {
+    try {
+        const xForwardedFor = req.headers['x-forwarded-for'];
+        if (typeof xForwardedFor === 'string' && xForwardedFor.length > 0) {
+            // "client, proxy1, proxy2"
+            return xForwardedFor.split(',')[0].trim();
+        }
+        if (Array.isArray(xForwardedFor) && xForwardedFor.length > 0) {
+            return String(xForwardedFor[0]).split(',')[0].trim();
+        }
+
+        // Fallbacks
+        if (req.ip) return req.ip;
+        if (req.socket && req.socket.remoteAddress) return req.socket.remoteAddress;
+    } catch (e) {
+        console.warn('⚠️  Failed to read client IP:', e.message);
+    }
+    return null;
+}
+
+// Creator referral tracking:
+// - Links like https://tonr.net/CREATORCODE hit this route
+// - We store (creator_code, IP) in Supabase, then redirect to pricing
+app.get('/:creatorCode', asyncHandler(async (req, res, next) => {
+    const { creatorCode } = req.params;
+
+    // Ignore obvious asset/API paths (contain a dot or "api/")
+    if (!creatorCode || creatorCode.includes('.') || creatorCode.toLowerCase() === 'api') {
+        return next();
+    }
+
+    const ip = getClientIp(req);
+
+    if (supabase && ip) {
+        try {
+            // Table suggestion:
+            // creator_referrals(id uuid pk, creator_code text, ip_address text, created_at timestamptz default now())
+            await supabase
+                .from('creator_referrals')
+                .insert({
+                    creator_code: creatorCode,
+                    ip_address: ip
+                });
+        } catch (e) {
+            console.error('Failed to record creator referral:', e.message);
+        }
+    }
+
+    // Send user into normal flow (you can change this to index.html if you prefer)
+    res.redirect('/pricing.html');
+}));
+
 // Rate limiting to prevent abuse
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -197,12 +250,35 @@ app.post('/api/auth/signup', authLimiter, asyncHandler(async (req, res) => {
             return res.status(400).json({ error: error.message });
         }
 
-        // User record will be created automatically by trigger, but ensure tier is set
+        // User record will be created automatically by trigger, but ensure tier and referrer are set
+        let referrerCode = null;
+
+        try {
+            const ip = getClientIp(req);
+            if (ip) {
+                // Find the most recent creator referral for this IP
+                // Table suggestion: creator_referrals(creator_code text, ip_address text, created_at timestamptz)
+                const { data: referral } = await supabase
+                    .from('creator_referrals')
+                    .select('creator_code')
+                    .eq('ip_address', ip)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                referrerCode = referral?.creator_code || null;
+            }
+        } catch (e) {
+            console.error('Failed to resolve referrer for signup:', e.message);
+        }
+
         await supabase
             .from('users')
             .upsert({
                 id: data.user.id,
-                tier: null // No tier selected yet - user must choose
+                tier: null, // No tier selected yet - user must choose
+                // Schema suggestion: ALTER TABLE users ADD COLUMN referrer_code text;
+                referrer_code: referrerCode
             }, {
                 onConflict: 'id'
             });
@@ -247,14 +323,39 @@ app.post('/api/auth/login', authLimiter, asyncHandler(async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        // Get user tier from users table
+        // Get user tier (and optional referrer_code) from users table
         const { data: userData } = await supabase
             .from('users')
-            .select('tier')
+            .select('tier, referrer_code')
             .eq('id', data.user.id)
             .single();
 
-        const tier = userData?.tier || null; // null means no tier selected yet
+        let tier = userData?.tier || null; // null means no tier selected yet
+
+        // If user has no referrer_code yet, try to attach one based on IP + previous referral click
+        if (supabase && !userData?.referrer_code) {
+            try {
+                const ip = getClientIp(req);
+                if (ip) {
+                    const { data: referral } = await supabase
+                        .from('creator_referrals')
+                        .select('creator_code')
+                        .eq('ip_address', ip)
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (referral?.creator_code) {
+                        await supabase
+                            .from('users')
+                            .update({ referrer_code: referral.creator_code })
+                            .eq('id', data.user.id);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to attach referrer on login:', e.message);
+            }
+        }
 
         // Generate token
         const token = jwt.sign(
@@ -621,6 +722,32 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             .from('users')
             .update({ tier: 'pro' })
             .eq('id', userId);
+
+        try {
+            // Look up which creator referred this user (if any)
+            // Schema suggestion: ALTER TABLE users ADD COLUMN referrer_code text;
+            const { data: userRow } = await supabase
+                .from('users')
+                .select('referrer_code')
+                .eq('id', userId)
+                .single();
+
+            if (userRow?.referrer_code) {
+                // Record a conversion for this creator
+                // Table suggestion:
+                // creator_conversions(id uuid pk, creator_code text, user_id uuid, stripe_session_id text, amount integer, created_at timestamptz default now())
+                await supabase
+                    .from('creator_conversions')
+                    .insert({
+                        creator_code: userRow.referrer_code,
+                        user_id: userId,
+                        stripe_session_id: session.id,
+                        amount: session.amount_total || 0
+                    });
+            }
+        } catch (e) {
+            console.error('Failed to record creator conversion:', e.message);
+        }
     }
 
     if (event.type === 'customer.subscription.deleted' && supabase) {

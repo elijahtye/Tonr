@@ -48,6 +48,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorMessage = document.getElementById('errorMessage');
     const successMessage = document.getElementById('successMessage');
 
+    // If ?signup in URL, show signup form (e.g. from "Try Tonr" button)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('signup') && signupForm) {
+        tabs.forEach(t => t.classList.remove('active'));
+        tabs.forEach(t => { if (t.dataset.tab === 'signup') t.classList.add('active'); });
+        forms.forEach(f => f.classList.remove('active'));
+        signupForm.classList.add('active');
+    }
+
     // Tab switching
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {

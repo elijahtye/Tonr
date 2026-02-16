@@ -5,6 +5,7 @@
   "main": "backend-example.js",
   "scripts": {
     "start": "node backend-example.js",
+    "serve": "npx serve public -l 5002",
     "dev": "nodemon backend-example.js"
   },
   "keywords": [
